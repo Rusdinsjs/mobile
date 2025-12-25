@@ -1,10 +1,10 @@
 // Login Screen with Dynamic Theming
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import { spacing, borderRadius, shadows, typography } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useColors } from '../store/themeStore';
-import { authAPI } from '../api/client';
+import { authAPI, commonAPI, API_BASE_URL } from '../api/client';
 
 export default function LoginScreen() {
     const colors = useColors();
@@ -12,8 +12,20 @@ export default function LoginScreen() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [companyName, setCompanyName] = useState('AttendX');
+    const [companyLogo, setCompanyLogo] = useState<string | null>(null);
     const isSubmittingRef = useRef(false); // Mutex lock
     const { login } = useAuthStore();
+
+    useEffect(() => {
+        commonAPI.getSettings()
+            .then(res => {
+                const s = res.data;
+                if (s.company_name) setCompanyName(s.company_name);
+                if (s.company_logo) setCompanyLogo(s.company_logo);
+            })
+            .catch(console.error);
+    }, []);
 
     const handleLogin = async () => {
         if (!email || !password) { Alert.alert('Error', 'Email dan password harus diisi'); return; }
@@ -44,8 +56,16 @@ export default function LoginScreen() {
         <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <View style={styles.content}>
                 <View style={styles.logoContainer}>
-                    <View style={[styles.logo, { backgroundColor: colors.accent }]}><Text style={styles.logoText}>⏰</Text></View>
-                    <Text style={[styles.appName, { color: colors.textPrimary }]}>AttendX</Text>
+                    {companyLogo ? (
+                        <Image
+                            source={{ uri: `${API_BASE_URL}${companyLogo}` }}
+                            style={styles.logoImage}
+                            resizeMode="contain"
+                        />
+                    ) : (
+                        <View style={[styles.logo, { backgroundColor: colors.accent }]}><Text style={styles.logoText}>⏰</Text></View>
+                    )}
+                    <Text style={[styles.appName, { color: colors.textPrimary }]}>{companyName}</Text>
                     <Text style={[styles.tagline, { color: colors.textMuted }]}>Sistem Presensi Karyawan</Text>
                 </View>
 
@@ -81,6 +101,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     content: { flex: 1, justifyContent: 'center', padding: spacing.xl },
     logoContainer: { alignItems: 'center', marginBottom: spacing.xxl },
     logo: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md, ...shadows.glow },
+    logoImage: { width: 100, height: 100, marginBottom: spacing.md },
     logoText: { fontSize: 40 },
     appName: { ...typography.h1 },
     tagline: { ...typography.bodySmall, marginTop: spacing.xs },

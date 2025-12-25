@@ -11,6 +11,7 @@ import {
     TextInput,
     ActivityIndicator,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { spacing, borderRadius, shadows, typography, themes } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
@@ -115,6 +116,20 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                             <Text style={{ color: colors.error, fontSize: 12 }}>✗ Verifikasi ditolak - silakan upload ulang</Text>
                         </View>
                     )}
+
+                    {/* QR Code for Kiosk */}
+                    <View style={[styles.qrContainer, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.qrTitle, { color: colors.textMuted }]}>QR Code untuk Kiosk</Text>
+                        <View style={styles.qrWrapper}>
+                            <QRCode
+                                value={user?.employee_id || 'UNKNOWN'}
+                                size={140}
+                                backgroundColor="white"
+                                color="#0f172a"
+                            />
+                        </View>
+                        <Text style={[styles.employeeIdText, { color: colors.textPrimary }]}>{user?.employee_id || '-'}</Text>
+                    </View>
                 </View>
 
                 {/* Account Info */}
@@ -215,12 +230,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
                 {/* Logout Button */}
                 <TouchableOpacity
-                    style={[styles.logoutButton, { backgroundColor: colors.error + '15', borderColor: colors.error + '30' }]}
+                    style={[styles.logoutButton, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
                     onPress={handleLogout}
                 >
                     <Text style={styles.logoutIcon}>🚪</Text>
-                    <Text style={[styles.logoutText, { color: colors.error }]}>Logout</Text>
+                    <Text style={[styles.logoutText, { color: colors.accent }]}>Logout</Text>
                 </TouchableOpacity>
+
 
                 <Text style={[styles.footer, { color: colors.textMuted }]}>@by roesch</Text>
             </ScrollView>
@@ -315,4 +331,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     saveBtn: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
     saveBtnText: { ...typography.body, fontWeight: '600' },
     faceStatus: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm },
+    qrContainer: { marginTop: spacing.xl, padding: spacing.lg, borderRadius: borderRadius.lg, alignItems: 'center' },
+    qrTitle: { ...typography.caption, marginBottom: spacing.md, textTransform: 'uppercase', letterSpacing: 0.5 },
+    qrWrapper: { padding: spacing.md, backgroundColor: 'white', borderRadius: borderRadius.md },
+    employeeIdText: { marginTop: spacing.md, ...typography.h3, fontWeight: '600' },
 });

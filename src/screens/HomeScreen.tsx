@@ -5,7 +5,7 @@ import { spacing, borderRadius, shadows, typography } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useColors } from '../store/themeStore';
-import { attendanceAPI } from '../api/client';
+import { attendanceAPI, commonAPI } from '../api/client';
 import { useLocation } from '../hooks/useLocation';
 import { calculateDistance, formatDistance } from '../utils/geofence';
 
@@ -15,6 +15,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     const colors = useColors();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [refreshing, setRefreshing] = useState(false);
+    const [companyName, setCompanyName] = useState('AttendX');
 
     const user = useAuthStore((state) => state.user);
     const { todayAttendance, isCheckedIn, isCheckedOut, setTodayAttendance } = useAttendanceStore();
@@ -22,6 +23,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(new Date()), 1000);
+        commonAPI.getSettings().then(res => {
+            if (res.data.company_name) setCompanyName(res.data.company_name);
+        }).catch(() => { });
         return () => clearInterval(interval);
     }, []);
 
@@ -69,7 +73,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={[styles.greeting, { color: colors.textSecondary }]}>Selamat datang,</Text>
+                    <Text style={[styles.greeting, { color: colors.textSecondary }]}>Selamat datang di {companyName},</Text>
                     <Text style={[styles.userName, { color: colors.textPrimary }]}>{user?.name?.split(' ')[0] || 'User'}</Text>
                 </View>
                 <View style={[styles.statusPill, { backgroundColor: getStatusColor() + '20' }]}>

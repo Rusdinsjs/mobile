@@ -3,7 +3,8 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 // Change this to your backend URL
-const API_BASE_URL = 'http://192.168.100.7:8080'; // Android emulator localhost
+// Change this to your backend URL
+export const API_BASE_URL = 'http://192.168.100.7:8080'; // Android emulator localhost
 // const API_BASE_URL = 'http://localhost:8080'; // iOS simulator
 
 const apiClient = axios.create({
@@ -105,6 +106,10 @@ export const attendanceAPI = {
 
     getHistory: (limit = 30, offset = 0) =>
         apiClient.get(`/api/attendance/history?limit=${limit}&offset=${offset}`),
+};
+
+export const commonAPI = {
+    getSettings: () => apiClient.get('/api/kiosk/settings'),
 };
 
 export default apiClient;

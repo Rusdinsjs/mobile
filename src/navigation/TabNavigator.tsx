@@ -11,13 +11,6 @@ import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 
-const TabIcon = ({ icon, label, focused, colors }: { icon: string; label: string; focused: boolean; colors: any }) => (
-    <View style={styles.tabIconContainer}>
-        <Text style={[styles.tabIcon, { opacity: focused ? 1 : 0.5 }]}>{icon}</Text>
-        <Text style={[styles.tabLabel, { color: focused ? colors.accent : colors.textMuted }]}>{label}</Text>
-    </View>
-);
-
 export default function TabNavigator() {
     const colors = useColors();
 
@@ -29,32 +22,47 @@ export default function TabNavigator() {
                     backgroundColor: colors.surface,
                     borderTopColor: colors.surfaceLight,
                     borderTopWidth: 1,
-                    height: 70,
-                    paddingBottom: spacing.sm,
-                    paddingTop: spacing.sm,
+                    height: 75,
+                    paddingBottom: 12,
+                    paddingTop: 8,
                 },
-                tabBarShowLabel: false,
+                tabBarActiveTintColor: colors.accent,
+                tabBarInactiveTintColor: colors.textMuted,
+                tabBarLabelStyle: {
+                    fontSize: 11,
+                    fontWeight: '600',
+                    marginTop: -4,
+                },
             }}
         >
             <Tab.Screen
                 name="Home"
                 component={HomeScreen}
                 options={{
-                    tabBarIcon: ({ focused }) => <TabIcon icon="🏠" label="Beranda" focused={focused} colors={colors} />,
+                    tabBarLabel: 'Beranda',
+                    tabBarIcon: ({ focused }) => (
+                        <Text style={[styles.tabIcon, { opacity: focused ? 1 : 0.5 }]}>🏠</Text>
+                    ),
                 }}
             />
             <Tab.Screen
                 name="History"
                 component={HistoryScreen}
                 options={{
-                    tabBarIcon: ({ focused }) => <TabIcon icon="📋" label="Riwayat" focused={focused} colors={colors} />,
+                    tabBarLabel: 'Riwayat',
+                    tabBarIcon: ({ focused }) => (
+                        <Text style={[styles.tabIcon, { opacity: focused ? 1 : 0.5 }]}>📋</Text>
+                    ),
                 }}
             />
             <Tab.Screen
                 name="Profile"
                 component={ProfileScreen}
                 options={{
-                    tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Profil" focused={focused} colors={colors} />,
+                    tabBarLabel: 'Profil',
+                    tabBarIcon: ({ focused }) => (
+                        <Text style={[styles.tabIcon, { opacity: focused ? 1 : 0.5 }]}>👤</Text>
+                    ),
                 }}
             />
         </Tab.Navigator>
@@ -62,16 +70,8 @@ export default function TabNavigator() {
 }
 
 const styles = StyleSheet.create({
-    tabIconContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     tabIcon: {
         fontSize: 22,
-        marginBottom: 2,
-    },
-    tabLabel: {
-        fontSize: 10,
-        fontWeight: '500',
     },
 });
+
