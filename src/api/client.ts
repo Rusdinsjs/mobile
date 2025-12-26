@@ -5,11 +5,9 @@ import { useAuthStore } from '../store/authStore';
 // Change this to your backend URL
 // Change this to your backend URL
 // Automatically select URL based on environment
-// Force VPS URL for testing production APK
-export const API_BASE_URL = 'http://148.230.98.192:8080';
-// export const API_BASE_URL = __DEV__
-//     ? 'http://192.168.100.7:8082'
-//     : 'http://148.230.98.192:8080';
+export const API_BASE_URL = __DEV__
+    ? 'http://192.168.100.7:8082'
+    : 'https://sjsgroup.site';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
