@@ -4,8 +4,12 @@ import { useAuthStore } from '../store/authStore';
 
 // Change this to your backend URL
 // Change this to your backend URL
-export const API_BASE_URL = 'http://192.168.100.7:8080'; // Android emulator localhost
-// const API_BASE_URL = 'http://localhost:8080'; // iOS simulator
+// Automatically select URL based on environment
+// Force VPS URL for testing production APK
+export const API_BASE_URL = 'http://148.230.98.192:8080';
+// export const API_BASE_URL = __DEV__
+//     ? 'http://192.168.100.7:8082'
+//     : 'http://148.230.98.192:8080';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
@@ -110,6 +114,7 @@ export const attendanceAPI = {
 
 export const commonAPI = {
     getSettings: () => apiClient.get('/api/kiosk/settings'),
+    getOffices: () => apiClient.get('/api/offices'),
 };
 
 export default apiClient;

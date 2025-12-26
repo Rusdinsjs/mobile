@@ -24,7 +24,10 @@ export default function LoginScreen() {
                 if (s.company_name) setCompanyName(s.company_name);
                 if (s.company_logo) setCompanyLogo(s.company_logo);
             })
-            .catch(console.error);
+            .catch(err => {
+                console.error(err);
+                Alert.alert('Connection Error', `Failed to fetch settings from: ${API_BASE_URL}. Error: ${err.message}`);
+            });
     }, []);
 
     const handleLogin = async () => {
@@ -90,7 +93,10 @@ export default function LoginScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.footer, { color: colors.textMuted }]}>v1.0.0 • @by roesch</Text>
+                <Text style={[styles.footer, { color: colors.textMuted }]}>
+                    v1.0.0 • @by roesch{'\n'}
+                    API: {API_BASE_URL}
+                </Text>
             </View>
         </KeyboardAvoidingView>
     );

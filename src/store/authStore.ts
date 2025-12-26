@@ -12,6 +12,15 @@ interface User {
     allowed_radius: number;
     face_embeddings?: number[][];
     face_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
+    office_id?: string;
+    office?: {
+        id: string;
+        name: string;
+        address: string;
+        latitude: number;
+        longitude: number;
+        radius: number;
+    };
 }
 
 interface AuthState {
