@@ -63,6 +63,20 @@
           "icon": "./assets/icon.png",
           "color": "#06B6D4"
         }
+      ],
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreMLDelegate": true,
+          "enableAndroidGpuDelegate": true
+        }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Diperlukan untuk verifikasi wajah saat absensi",
+          "enableMicrophonePermission": false
+        }
       ]
     ],
     "extra": {

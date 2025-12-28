@@ -1,10 +1,11 @@
 // Main App Entry Point
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from './src/store/authStore';
 import { useColors } from './src/store/themeStore';
+import { preloadModel } from './src/services/FaceEmbeddingService';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -14,6 +15,9 @@ import TransferRequestScreen from './src/screens/TransferRequestScreen';
 import TabNavigator from './src/navigation/TabNavigator';
 
 const Stack = createNativeStackNavigator();
+
+// Preload TFLite model on app start
+preloadModel();
 
 function AuthStack() {
   const colors = useColors();

@@ -1,4 +1,4 @@
-// Profile Screen - With Theme Selection (Reorganized)
+// Profile Screen - With Theme Selection (Reorganized & Realtime)
 import React, { useState } from 'react';
 import {
     View,
@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useThemeStore, useColors } from '../store/themeStore';
 import { userAPI } from '../api/client';
+import { useUserUpdates } from '../hooks/useWebSocket'; // Import WebSocket hook
 
 interface ProfileScreenProps {
     navigation: any;
@@ -27,6 +28,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     const { currentTheme, setTheme } = useThemeStore();
 
     const user = useAuthStore((state) => state.user);
+    const setUser = useAuthStore((state) => state.setUser); // Needed to update user store
     const logout = useAuthStore((state) => state.logout);
     const resetAttendance = useAttendanceStore((state) => state.reset);
 
@@ -37,6 +39,26 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
+
+    // WebSocket: Listen for user updates (e.g., office transfer)
+    useUserUpdates(async () => {
+        try {
+            console.log('[Profile] User update received via WebSocket');
+            const res = await userAPI.getProfile();
+            if (res.data) {
+                // Ensure office data is correctly structured
+                const updatedUser = {
+                    ...res.data,
+                    office_lat: res.data.office?.latitude || res.data.office_lat,
+                    office_long: res.data.office?.longitude || res.data.office_long,
+                    allowed_radius: res.data.office?.radius || res.data.allowed_radius,
+                };
+                setUser(updatedUser);
+            }
+        } catch (error) {
+            console.log('[Profile] Failed to refresh profile:', error);
+        }
+    });
 
     const handleLogout = () => {
         Alert.alert('Logout', 'Yakin ingin keluar?', [
@@ -69,270 +91,254 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
     const closePasswordModal = () => {
         setShowPasswordModal(false);
-        setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
     };
 
-    const InfoRow = ({ label, value }: { label: string; value: string }) => (
+    const InfoRow = ({ label, value }: { label: string; value: string | undefined }) => (
         <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.textMuted }]}>{label}</Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{value}</Text>
+            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{value || '-'}</Text>
         </View>
+    );
+
+    const ThemeOption = ({ themeKey, label, color }: { themeKey: string, label: string, color: string }) => (
+        <TouchableOpacity
+            style={[
+                styles.themeOption,
+                { borderColor: currentTheme.id === themeKey ? colors.accent : 'transparent', backgroundColor: colors.surface }
+            ]}
+            onPress={() => setTheme(themeKey)}
+        >
+            <View style={[styles.themeColor, { backgroundColor: color }]} />
+            <Text style={[styles.themeLabel, { color: colors.textPrimary }]}>{label}</Text>
+            {currentTheme.id === themeKey && <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />}
+        </TouchableOpacity>
     );
 
     const styles = createStyles(colors);
 
     return (
-        <>
-            <ScrollView
-                style={[styles.container, { backgroundColor: colors.background }]}
-                contentContainerStyle={styles.content}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Header with Avatar */}
-                <View style={styles.header}>
-                    <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
-                        <Text style={[styles.avatarText, { color: colors.primary }]}>
-                            {user?.name?.charAt(0)?.toUpperCase() || '?'}
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.md }}>
+                <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: spacing.sm, borderRadius: borderRadius.full, paddingHorizontal: spacing.md }}
+                    onPress={handleLogout}
+                >
+                    <Text style={{ marginRight: spacing.xs, fontSize: 16 }}>🔴</Text>
+                    <Text style={{ color: colors.error, fontWeight: '600' }}>Keluar</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Profile Card */}
+            <View style={[styles.profileCard, { backgroundColor: colors.surface }]}>
+                <View style={[styles.avatarContainer, { borderColor: colors.accent }]}>
+                    <Text style={[styles.avatarText, { color: colors.accent }]}>
+                        {user?.name?.charAt(0).toUpperCase()}
+                    </Text>
+                </View>
+                <Text style={[styles.name, { color: colors.textPrimary }]}>{user?.name}</Text>
+                <Text style={[styles.role, { color: colors.textSecondary }]}>{user?.role}</Text>
+
+                {/* Office Badges */}
+                <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, { backgroundColor: colors.accent + '20' }]}>
+                        <Text style={[styles.badgeText, { color: colors.accent }]}>
+                            {user?.office?.name || 'Kantor Pusat'}
                         </Text>
                     </View>
-                    <Text style={[styles.userName, { color: colors.textPrimary }]}>{user?.name || 'User'}</Text>
-                    <View style={[styles.roleBadge, { backgroundColor: colors.accent + '20' }]}>
-                        <Text style={[styles.roleText, { color: colors.accent }]}>{user?.role?.toUpperCase() || 'EMPLOYEE'}</Text>
-                    </View>
-
-                    {/* Face Verification Status Banner */}
-                    {user?.face_verification_status === 'pending' && (
-                        <View style={[styles.statusBanner, { backgroundColor: colors.warning + '20' }]}>
-                            <Text style={{ color: colors.warning, fontSize: 12 }}>⏳ Menunggu verifikasi wajah dari admin</Text>
-                        </View>
-                    )}
-                    {user?.face_verification_status === 'verified' && (
-                        <View style={[styles.statusBanner, { backgroundColor: colors.success + '20' }]}>
-                            <Text style={{ color: colors.success, fontSize: 12 }}>✓ Wajah terverifikasi</Text>
-                        </View>
-                    )}
-                    {user?.face_verification_status === 'rejected' && (
-                        <View style={[styles.statusBanner, { backgroundColor: colors.error + '20' }]}>
-                            <Text style={{ color: colors.error, fontSize: 12 }}>✗ Verifikasi ditolak - silakan upload ulang</Text>
-                        </View>
-                    )}
-
-                    {/* QR Code for Kiosk */}
-                    <View style={[styles.qrContainer, { backgroundColor: colors.surface }]}>
-                        <Text style={[styles.qrTitle, { color: colors.textMuted }]}>QR Code untuk Kiosk</Text>
-                        <View style={styles.qrWrapper}>
-                            <QRCode
-                                value={user?.employee_id || 'UNKNOWN'}
-                                size={140}
-                                backgroundColor="white"
-                                color="#0f172a"
-                            />
-                        </View>
-                        <Text style={[styles.employeeIdText, { color: colors.textPrimary }]}>{user?.employee_id || '-'}</Text>
+                    <View style={[styles.badge, { backgroundColor: (user?.face_verification_status === 'verified' ? colors.success : colors.warning) + '20' }]}>
+                        <Text style={[styles.badgeText, { color: (user?.face_verification_status === 'verified' ? colors.success : colors.warning) }]}>
+                            {user?.face_verification_status === 'verified' ? 'Terverifikasi' : 'Belum Verifikasi'}
+                        </Text>
                     </View>
                 </View>
 
-                {/* Account Info */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Akun</Text>
-                    <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <InfoRow label="ID Karyawan" value={user?.employee_id || '-'} />
-                        <View style={[styles.divider, { backgroundColor: colors.surfaceLight }]} />
-                        <InfoRow label="Email" value={user?.email || '-'} />
-                    </View>
+                {/* QR Code */}
+                <View style={[styles.qrContainer, { backgroundColor: 'white' }]}>
+                    <QRCode value={user?.id || 'unknown'} size={120} />
                 </View>
+                <Text style={[styles.qrLabel, { color: colors.textMuted }]}>ID: {user?.employee_id}</Text>
+            </View>
 
-                {/* Office Location */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Lokasi Kantor</Text>
-                    <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <InfoRow label="Koordinat" value={`${user?.office_lat?.toFixed(4)}, ${user?.office_long?.toFixed(4)}`} />
-                        <View style={[styles.divider, { backgroundColor: colors.surfaceLight }]} />
-                        <InfoRow label="Radius" value={`${user?.allowed_radius || 50} meter`} />
-                    </View>
+            {/* Personal Info */}
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Informasi Pribadi</Text>
+                <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                    <InfoRow label="Email" value={user?.email} />
+                    <View style={[styles.divider, { backgroundColor: colors.surfaceLight }]} />
+                    <InfoRow label="NIK" value={user?.employee_id} />
                 </View>
+            </View>
 
-                {/* App Info */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Aplikasi</Text>
-                    <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                        <InfoRow label="Versi" value="1.0.0" />
-                        <View style={[styles.divider, { backgroundColor: colors.surfaceLight }]} />
-                        <InfoRow label="Build" value="2024.12.24" />
-                    </View>
-                </View>
+            {/* Settings */}
+            <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Pengaturan</Text>
 
-                {/* Theme Selection - MOVED TO BOTTOM */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Tema</Text>
-                    <View style={styles.themeGrid}>
+                {/* Theme Selection */}
+                <View style={[styles.card, { backgroundColor: colors.surface, padding: spacing.sm, marginBottom: spacing.md }]}>
+                    <Text style={[styles.infoLabel, { color: colors.textMuted, marginLeft: spacing.sm, marginBottom: spacing.sm }]}>Tema Aplikasi</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
                         {themes.map((theme) => (
                             <TouchableOpacity
                                 key={theme.id}
                                 style={[
-                                    styles.themeItem,
-                                    { backgroundColor: colors.surface },
-                                    currentTheme.id === theme.id && { borderColor: colors.accent, borderWidth: 2 },
+                                    styles.themeOption,
+                                    { borderColor: currentTheme.id === theme.id ? colors.accent : 'transparent', backgroundColor: colors.surface }
                                 ]}
                                 onPress={() => setTheme(theme.id)}
                             >
-                                <View style={[styles.themeSwatch, { backgroundColor: theme.colors.background }]}>
-                                    <View style={[styles.themeAccent, { backgroundColor: theme.colors.accent }]} />
-                                </View>
-                                <Text style={styles.themeIcon}>{theme.icon}</Text>
-                                <Text style={[styles.themeName, { color: colors.textPrimary }]}>{theme.name}</Text>
+                                <View style={[styles.themeColor, { backgroundColor: theme.colors.accent }]} />
+                                <Text style={[styles.themeLabel, { color: colors.textPrimary }]}>{theme.name}</Text>
+                                {currentTheme.id === theme.id && <View style={[styles.activeDot, { backgroundColor: colors.accent }]} />}
                             </TouchableOpacity>
                         ))}
-                    </View>
+                    </ScrollView>
                 </View>
 
-                {/* Security Section - MOVED TO BOTTOM */}
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Keamanan</Text>
-                    <TouchableOpacity
-                        style={[styles.menuItem, { backgroundColor: colors.surface }]}
-                        onPress={() => setShowPasswordModal(true)}
-                    >
-                        <View style={styles.menuItemLeft}>
-                            <Text style={styles.menuIcon}>🔐</Text>
-                            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Ubah Password</Text>
-                        </View>
-                        <Text style={[styles.menuArrow, { color: colors.textMuted }]}>›</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.menuItem, { backgroundColor: colors.surface, marginTop: spacing.sm }]}
-                        onPress={() => navigation.navigate('FaceRegistration')}
-                    >
-                        <View style={styles.menuItemLeft}>
-                            <Text style={styles.menuIcon}>😊</Text>
-                            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Daftar Wajah</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                            <View style={[styles.faceStatus, { backgroundColor: user?.face_embeddings && user.face_embeddings.length > 0 ? colors.success + '20' : colors.warning + '20' }]}>
-                                <Text style={{ fontSize: 10, color: user?.face_embeddings && user.face_embeddings.length > 0 ? colors.success : colors.warning }}>
-                                    {user?.face_embeddings && user.face_embeddings.length > 0 ? `${user.face_embeddings.length}/5` : 'Belum'}
-                                </Text>
-                            </View>
-                            <Text style={[styles.menuArrow, { color: colors.textMuted }]}>›</Text>
-                        </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.menuItem, { backgroundColor: colors.surface, marginTop: spacing.sm }]}
-                        onPress={() => navigation.navigate('TransferRequest')}
-                    >
-                        <View style={styles.menuItemLeft}>
-                            <Text style={styles.menuIcon}>📍</Text>
-                            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Pindah Lokasi Kantor</Text>
-                        </View>
-                        <Text style={[styles.menuArrow, { color: colors.textMuted }]}>›</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Logout Button */}
                 <TouchableOpacity
-                    style={[styles.logoutButton, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
-                    onPress={handleLogout}
+                    style={[styles.menuItem, { backgroundColor: colors.surface, marginTop: spacing.sm }, user?.face_verification_status === 'verified' && { opacity: 0.7 }]}
+                    onPress={() => navigation.navigate('FaceRegistration')}
+                    disabled={user?.face_verification_status === 'verified'}
                 >
-                    <Text style={styles.logoutIcon}>🚪</Text>
-                    <Text style={[styles.logoutText, { color: colors.accent }]}>Logout</Text>
+                    <View>
+                        <Text style={[styles.menuText, { color: colors.textPrimary }]}>Registrasi Wajah</Text>
+                        {user?.face_verification_status === 'verified' && (
+                            <Text style={{ fontSize: 11, color: colors.success, marginTop: 2 }}>Terverifikasi ✓</Text>
+                        )}
+                    </View>
+                    {user?.face_verification_status !== 'verified' && (
+                        <Text style={[styles.menuArrow, { color: colors.textMuted }]}>›</Text>
+                    )}
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                    style={[styles.menuItem, { backgroundColor: colors.surface, marginTop: spacing.md }]}
+                    onPress={() => setShowPasswordModal(true)}
+                >
+                    <Text style={[styles.menuText, { color: colors.textPrimary }]}>Ubah Password</Text>
+                    <Text style={[styles.menuArrow, { color: colors.textMuted }]}>›</Text>
+                </TouchableOpacity>
+            </View>
 
-                <Text style={[styles.footer, { color: colors.textMuted }]}>@by roesch</Text>
-            </ScrollView>
-
-            {/* Change Password Modal */}
-            <Modal visible={showPasswordModal} animationType="slide" transparent onRequestClose={closePasswordModal}>
+            {/* Password Modal */}
+            <Modal
+                visible={showPasswordModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={closePasswordModal}
+            >
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
                         <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Ubah Password</Text>
 
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Password Saat Ini</Text>
-                            <View style={[styles.passwordContainer, { backgroundColor: colors.surfaceLight }]}>
-                                <TextInput style={[styles.passwordInput, { color: colors.textPrimary }]} placeholder="Password lama" placeholderTextColor={colors.textMuted} value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry={!showCurrentPassword} />
-                                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowCurrentPassword(!showCurrentPassword)}><Text>{showCurrentPassword ? '👁️' : '🔒'}</Text></TouchableOpacity>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Password Saat Ini</Text>
+                            <View style={[styles.passwordContainer, { borderColor: colors.surfaceLight }]}>
+                                <TextInput
+                                    style={[styles.input, { color: colors.textPrimary }]}
+                                    value={currentPassword}
+                                    onChangeText={setCurrentPassword}
+                                    secureTextEntry={!showCurrentPassword}
+                                    placeholderTextColor={colors.textMuted}
+                                />
+                                <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)} style={styles.eyeIcon}>
+                                    <Text style={{ color: colors.textMuted }}>{showCurrentPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Password Baru</Text>
-                            <View style={[styles.passwordContainer, { backgroundColor: colors.surfaceLight }]}>
-                                <TextInput style={[styles.passwordInput, { color: colors.textPrimary }]} placeholder="Password baru" placeholderTextColor={colors.textMuted} value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} />
-                                <TouchableOpacity style={styles.eyeButton} onPress={() => setShowNewPassword(!showNewPassword)}><Text>{showNewPassword ? '👁️' : '🔒'}</Text></TouchableOpacity>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Password Baru</Text>
+                            <View style={[styles.passwordContainer, { borderColor: colors.surfaceLight }]}>
+                                <TextInput
+                                    style={[styles.input, { color: colors.textPrimary }]}
+                                    value={newPassword}
+                                    onChangeText={setNewPassword}
+                                    secureTextEntry={!showNewPassword}
+                                    placeholderTextColor={colors.textMuted}
+                                />
+                                <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)} style={styles.eyeIcon}>
+                                    <Text style={{ color: colors.textMuted }}>{showNewPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Konfirmasi Password</Text>
-                            <View style={[styles.passwordContainer, { backgroundColor: colors.surfaceLight }]}>
-                                <TextInput style={[styles.passwordInput, { color: colors.textPrimary }]} placeholder="Ulangi password" placeholderTextColor={colors.textMuted} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showNewPassword} />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>Konfirmasi Password Baru</Text>
+                            <View style={[styles.passwordContainer, { borderColor: colors.surfaceLight }]}>
+                                <TextInput
+                                    style={[styles.input, { color: colors.textPrimary }]}
+                                    value={confirmPassword}
+                                    onChangeText={setConfirmPassword}
+                                    secureTextEntry={!showNewPassword}
+                                    placeholderTextColor={colors.textMuted}
+                                />
                             </View>
                         </View>
 
                         <View style={styles.modalButtons}>
-                            <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.surfaceLight }]} onPress={closePasswordModal}>
-                                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Batal</Text>
+                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.surfaceLight }]} onPress={closePasswordModal}>
+                                <Text style={{ color: colors.textSecondary }}>Batal</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.accent }]} onPress={handleChangePassword} disabled={isChangingPassword}>
-                                {isChangingPassword ? <ActivityIndicator color={colors.primary} size="small" /> : <Text style={[styles.saveBtnText, { color: colors.primary }]}>Simpan</Text>}
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: colors.accent }]}
+                                onPress={handleChangePassword}
+                                disabled={isChangingPassword}
+                            >
+                                {isChangingPassword ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Simpan</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
-        </>
+        </ScrollView>
     );
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1 },
-    content: { padding: spacing.lg, paddingTop: spacing.xxl + 10, paddingBottom: spacing.xxl },
-    header: { alignItems: 'center', marginBottom: spacing.xl },
-    avatar: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md, ...shadows.glow },
-    avatarText: { fontSize: 28, fontWeight: '700' },
-    userName: { ...typography.h2 },
-    roleBadge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, marginTop: spacing.sm },
-    roleText: { ...typography.caption, fontWeight: '600', letterSpacing: 0.5 },
-    statusBanner: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.md, marginTop: spacing.md },
+    content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+    profileCard: { borderRadius: borderRadius.xl, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.lg, ...shadows.md },
+    avatarContainer: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md },
+    avatarText: { fontSize: 32, fontWeight: 'bold' },
+    name: { ...typography.h2, marginBottom: 2 },
+    role: { ...typography.caption, textTransform: 'capitalize', marginBottom: spacing.md },
+    badgeContainer: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+    badge: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: borderRadius.full },
+    badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
+    qrContainer: { padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: spacing.sm },
+    qrLabel: { ...typography.caption, fontFamily: 'monospace' },
     section: { marginBottom: spacing.lg },
     sectionTitle: { ...typography.caption, marginBottom: spacing.sm, marginLeft: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
-    themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    themeItem: { width: '31%', padding: spacing.sm, borderRadius: borderRadius.lg, alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
-    themeSwatch: { width: 48, height: 32, borderRadius: borderRadius.sm, marginBottom: spacing.xs, overflow: 'hidden' },
-    themeAccent: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 8 },
-    themeIcon: { fontSize: 16, marginBottom: 2 },
-    themeName: { fontSize: 10, fontWeight: '500', textAlign: 'center' },
     card: { borderRadius: borderRadius.lg, padding: spacing.md },
-    menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: borderRadius.lg, padding: spacing.md },
-    menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    menuIcon: { fontSize: 18 },
-    menuText: { ...typography.body },
+    infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
+    infoLabel: { fontSize: 14 },
+    infoValue: { fontSize: 14, fontWeight: '500' },
+    divider: { height: 1, marginVertical: spacing.xs },
+    menuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderRadius: borderRadius.lg, marginBottom: spacing.xs },
+    menuText: { fontSize: 15, fontWeight: '500' },
     menuArrow: { fontSize: 20 },
-    infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
-    infoLabel: { ...typography.bodySmall },
-    infoValue: { ...typography.bodySmall, fontWeight: '500' },
-    divider: { height: 1 },
-    logoutButton: { flexDirection: 'row', borderRadius: borderRadius.lg, padding: spacing.lg, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md, gap: spacing.sm, borderWidth: 1 },
-    logoutIcon: { fontSize: 18 },
-    logoutText: { ...typography.body, fontWeight: '600' },
-    footer: { ...typography.caption, textAlign: 'center', marginTop: spacing.xl },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-    modalContent: { borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.xl, paddingBottom: spacing.xxl },
-    modalTitle: { ...typography.h2, textAlign: 'center', marginBottom: spacing.xl },
-    inputGroup: { marginBottom: spacing.lg },
-    inputLabel: { ...typography.caption, marginBottom: spacing.xs, textTransform: 'uppercase' },
-    passwordContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: borderRadius.md },
-    passwordInput: { flex: 1, padding: spacing.md, fontSize: 14 },
-    eyeButton: { padding: spacing.md },
+    logoutButton: { borderWidth: 1, borderRadius: borderRadius.lg, padding: spacing.md, alignItems: 'center', marginTop: spacing.md },
+    logoutText: { fontWeight: '600' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.xl },
+    modalContent: { borderRadius: borderRadius.xl, padding: spacing.xl },
+    modalTitle: { ...typography.h3, marginBottom: spacing.lg, textAlign: 'center' },
+    inputGroup: { marginBottom: spacing.md },
+    label: { ...typography.caption, marginBottom: spacing.xs },
+    input: { borderRadius: borderRadius.md, padding: spacing.sm, fontSize: 16, flex: 1 },
+    passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: borderRadius.md },
+    eyeIcon: { padding: spacing.sm },
     modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-    cancelBtn: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
-    cancelBtnText: { ...typography.body },
-    saveBtn: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
-    saveBtnText: { ...typography.body, fontWeight: '600' },
-    faceStatus: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm },
-    qrContainer: { marginTop: spacing.xl, padding: spacing.lg, borderRadius: borderRadius.lg, alignItems: 'center' },
-    qrTitle: { ...typography.caption, marginBottom: spacing.md, textTransform: 'uppercase', letterSpacing: 0.5 },
-    qrWrapper: { padding: spacing.md, backgroundColor: 'white', borderRadius: borderRadius.md },
-    employeeIdText: { marginTop: spacing.md, ...typography.h3, fontWeight: '600' },
+    modalButton: { flex: 1, padding: spacing.md, borderRadius: borderRadius.lg, alignItems: 'center' },
+    themeOption: { flexDirection: 'row', alignItems: 'center', padding: spacing.sm, paddingRight: spacing.md, borderRadius: borderRadius.full, marginRight: spacing.sm, borderWidth: 1 },
+    themeColor: { width: 16, height: 16, borderRadius: 8, marginRight: spacing.sm },
+    themeLabel: { fontSize: 12, fontWeight: '600', marginRight: spacing.xs },
+    activeDot: { width: 6, height: 6, borderRadius: 3, marginLeft: spacing.xs },
 });

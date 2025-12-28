@@ -2,12 +2,9 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-// Change this to your backend URL
-// Change this to your backend URL
-// Automatically select URL based on environment
-export const API_BASE_URL = __DEV__
-    ? 'http://192.168.100.7:8082'
-    : 'https://sjsgroup.site';
+// Production URL - digunakan untuk DEV dan PROD
+// Untuk testing local, ganti sementara ke IP lokal Anda
+export const API_BASE_URL = 'https://sjsgroup.site';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,

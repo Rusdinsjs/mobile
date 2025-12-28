@@ -1,159 +1,398 @@
-// Check-In Screen with Dynamic Theming
-import React, { useState } from 'react';
+// Check-In Screen with Face Verification and Offline Support
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { spacing, borderRadius, shadows, typography } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useColors } from '../store/themeStore';
-import { attendanceAPI } from '../api/client';
 import { useLocation } from '../hooks/useLocation';
+import { useOfflineAttendance } from '../hooks/useOfflineAttendance';
 import { isWithinRadius, formatDistance, calculateDistance } from '../utils/geofence';
-import FaceCamera from '../components/FaceCamera';
+import { FaceVerification } from '../components/FaceVerification';
 
 interface CheckInScreenProps { navigation: any; }
 
-type ScreenMode = 'confirm' | 'camera' | 'success';
+type ScreenMode = 'loading' | 'verify' | 'processing' | 'success' | 'error';
 
 export default function CheckInScreen({ navigation }: CheckInScreenProps) {
     const colors = useColors();
-    const [mode, setMode] = useState<ScreenMode>('confirm');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+    const [mode, setMode] = useState<ScreenMode>('loading');
+    const [errorMessage, setErrorMessage] = useState<string>('');
+    const [successMessage, setSuccessMessage] = useState<string>('');
 
     const user = useAuthStore((state) => state.user);
     const { isCheckedIn, checkIn, checkOut } = useAttendanceStore();
     const { latitude, longitude, isMockLocation } = useLocation();
+    const { isOnline, checkIn: offlineCheckIn, checkOut: offlineCheckOut } = useOfflineAttendance();
 
-    const validateLocation = (): boolean => {
-        if (!user || !latitude || !longitude) { Alert.alert('Error', 'Lokasi tidak tersedia.'); return false; }
-        const withinRadius = isWithinRadius(user.office_lat, user.office_long, latitude, longitude, user.allowed_radius);
-        if (!withinRadius) {
-            const dist = calculateDistance(user.office_lat, user.office_long, latitude, longitude);
-            Alert.alert('Di Luar Jangkauan', `Anda berada ${formatDistance(dist)} dari kantor.`);
-            return false;
-        }
-        if (isMockLocation) { Alert.alert('Peringatan', 'Fake GPS terdeteksi.'); return false; }
-        return true;
-    };
+    // Auto-start verification when location is ready
+    React.useEffect(() => {
+        if (mode === 'loading' && user && latitude && longitude) {
+            // Check if within radius
+            const withinRadius = isWithinRadius(
+                user.office_lat,
+                user.office_long,
+                latitude,
+                longitude,
+                user.allowed_radius
+            );
 
-    const handleStartCapture = () => { if (validateLocation()) setMode('camera'); };
-    const handlePhotoCapture = (photoUri: string) => { setCapturedPhoto(photoUri); performCheckInOut(photoUri); };
-    const handleSkipFace = () => { performCheckInOut(null); };
-
-    const performCheckInOut = async (photoUri: string | null) => {
-        if (!validateLocation()) return;
-        setIsProcessing(true);
-        setMode('confirm');
-        try {
-            const deviceInfo = `Mobile App - ${new Date().toISOString()}`;
-            if (isCheckedIn) {
-                const response = await attendanceAPI.checkOut({ latitude: latitude!, longitude: longitude!, device_info: deviceInfo });
-                checkOut(response.data.attendance);
-            } else {
-                const response = await attendanceAPI.checkIn({ latitude: latitude!, longitude: longitude!, device_info: deviceInfo, is_mock_location: isMockLocation });
-                checkIn(response.data.attendance);
+            if (!withinRadius) {
+                const dist = calculateDistance(user.office_lat, user.office_long, latitude, longitude);
+                setErrorMessage(`Anda berada ${formatDistance(dist)} dari kantor. Maksimal ${user.allowed_radius}m.`);
+                setMode('error');
+                return;
             }
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setMode('success');
-            setTimeout(() => navigation.goBack(), 1500);
+
+            if (isMockLocation) {
+                setErrorMessage('Fake GPS terdeteksi. Check-in tidak diizinkan.');
+                setMode('error');
+                return;
+            }
+
+            // Location valid, proceed to face verification
+            setMode('verify');
+        }
+    }, [latitude, longitude, user, mode]);
+
+    // Handle face verification result
+    const handleVerificationResult = useCallback(async (result: {
+        isMatch: boolean;
+        confidence: number;
+        embedding?: number[];
+    }) => {
+        console.log('[CheckIn] Verification result:', result);
+
+        if (!result.isMatch) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            setErrorMessage(`Wajah tidak cocok (${Math.round(result.confidence * 100)}% confidence)`);
+            setMode('error');
+            return;
+        }
+
+        // Face verified, proceed with check-in/out
+        setMode('processing');
+
+        try {
+            const action = isCheckedIn ? 'Check Out' : 'Check In';
+
+            if (isCheckedIn) {
+                // Check-out
+                const checkOutResult = await offlineCheckOut(latitude!, longitude!);
+
+                if (checkOutResult.success) {
+                    checkOut({ check_out_time: new Date().toISOString() } as any);
+                    setSuccessMessage(checkOutResult.isOffline
+                        ? 'Check Out tersimpan (offline)'
+                        : 'Check Out berhasil!');
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setMode('success');
+                    setTimeout(() => navigation.goBack(), 2000);
+                } else {
+                    throw new Error(checkOutResult.message);
+                }
+            } else {
+                // Check-in
+                const checkInResult = await offlineCheckIn(
+                    latitude!,
+                    longitude!,
+                    isMockLocation,
+                    undefined // photo uri for offline verification (already verified above)
+                );
+
+                if (checkInResult.success) {
+                    checkIn({ check_in_time: new Date().toISOString() } as any);
+                    setSuccessMessage(checkInResult.isOffline
+                        ? 'Check In tersimpan (offline)'
+                        : 'Check In berhasil!');
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setMode('success');
+                    setTimeout(() => navigation.goBack(), 2000);
+                } else {
+                    throw new Error(checkInResult.message);
+                }
+            }
         } catch (error: any) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert('Error', error.response?.data?.error || 'Operasi gagal');
-        } finally {
-            setIsProcessing(false);
+            setErrorMessage(error.message || 'Operasi gagal');
+            setMode('error');
         }
+    }, [isCheckedIn, latitude, longitude, isMockLocation, offlineCheckIn, offlineCheckOut, checkIn, checkOut, navigation]);
+
+    const handleRetry = () => {
+        setErrorMessage('');
+        setMode('loading');
     };
 
     const styles = createStyles(colors);
 
-    if (mode === 'success') {
+    // Loading state - waiting for location
+    if (mode === 'loading') {
         return (
-            <View style={[styles.container, { backgroundColor: colors.background }]}>
-                <View style={styles.successContainer}>
-                    {capturedPhoto && <Image source={{ uri: capturedPhoto }} style={styles.capturedPhoto} />}
-                    <View style={[styles.successIcon, { backgroundColor: colors.success }]}><Text style={styles.successEmoji}>✓</Text></View>
-                    <Text style={[styles.successText, { color: colors.success }]}>{isCheckedIn ? 'Check Out Berhasil!' : 'Check In Berhasil!'}</Text>
-                </View>
+            <View style={[styles.container, styles.centered]}>
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={[styles.statusText, { color: colors.textMuted }]}>
+                    Mencari lokasi...
+                </Text>
+                <TouchableOpacity
+                    style={[styles.cancelButton, { borderColor: colors.surfaceLight }]}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Batal</Text>
+                </TouchableOpacity>
             </View>
         );
     }
 
-    if (mode === 'camera') {
-        return <FaceCamera onCapture={handlePhotoCapture} onCancel={handleSkipFace} isLoading={isProcessing} />;
+    // Face verification mode
+    if (mode === 'verify') {
+        const storedEmbeddings = user?.face_embeddings || [];
+
+        if (storedEmbeddings.length === 0) {
+            return (
+                <View style={[styles.container, styles.centered]}>
+                    <View style={[styles.errorIcon, { backgroundColor: colors.warning }]}>
+                        <Text style={styles.errorEmoji}>⚠️</Text>
+                    </View>
+                    <Text style={[styles.errorTitle, { color: colors.warning }]}>
+                        Wajah Belum Terdaftar
+                    </Text>
+                    <Text style={[styles.errorSubtitle, { color: colors.textMuted }]}>
+                        Silakan daftarkan wajah Anda terlebih dahulu di menu Profil.
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.retryButton, { backgroundColor: colors.warning }]}
+                        onPress={() => navigation.navigate('FaceRegistration')}
+                    >
+                        <Text style={styles.retryButtonText}>Daftar Wajah</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.cancelButton, { borderColor: colors.surfaceLight, marginTop: spacing.sm }]}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Kembali</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.container}>
+                {/* Header info */}
+                <View style={[styles.header, { backgroundColor: colors.surface }]}>
+                    <View style={styles.headerRow}>
+                        <View style={[styles.badge, { backgroundColor: isOnline ? colors.success : colors.warning }]}>
+                            <Text style={styles.badgeText}>{isOnline ? '🌐 Online' : '📴 Offline'}</Text>
+                        </View>
+                        <View style={[styles.badge, { backgroundColor: colors.surfaceLight }]}>
+                            <Text style={[styles.badgeText, { color: colors.textSecondary }]}>
+                                {isCheckedIn ? '🚪 Check Out' : '📍 Check In'}
+                            </Text>
+                        </View>
+                    </View>
+                    <Text style={[styles.headerTime, { color: colors.accent }]}>
+                        {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                </View>
+
+                {/* Face verification camera */}
+                <FaceVerification
+                    storedEmbeddings={storedEmbeddings}
+                    onVerificationResult={handleVerificationResult}
+                    onError={(error) => {
+                        setErrorMessage(error);
+                        setMode('error');
+                    }}
+                    style={{ flex: 1 }}
+                />
+
+                {/* Cancel button overlay */}
+                <TouchableOpacity
+                    style={styles.floatingCancel}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Text style={styles.floatingCancelText}>✕</Text>
+                </TouchableOpacity>
+            </View>
+        );
     }
 
-    const distance = user && latitude && longitude ? calculateDistance(user.office_lat, user.office_long, latitude, longitude) : null;
+    // Processing state
+    if (mode === 'processing') {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={[styles.statusText, { color: colors.textMuted }]}>
+                    {isCheckedIn ? 'Memproses Check Out...' : 'Memproses Check In...'}
+                </Text>
+            </View>
+        );
+    }
 
-    return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.previewCard}>
-                <View style={[styles.previewIcon, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
-                    <Text style={styles.previewEmoji}>{isCheckedIn ? '🚪' : '📍'}</Text>
+    // Success state
+    if (mode === 'success') {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <View style={[styles.successIcon, { backgroundColor: colors.success }]}>
+                    <Text style={styles.successEmoji}>✓</Text>
                 </View>
-                <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>{isCheckedIn ? 'Check Out' : 'Check In'}</Text>
-                <Text style={[styles.previewTime, { color: colors.accent }]}>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
+                <Text style={[styles.successTitle, { color: colors.success }]}>
+                    {successMessage}
+                </Text>
+                <Text style={[styles.successTime, { color: colors.accent }]}>
+                    {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </Text>
             </View>
+        );
+    }
 
-            <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-                <View style={styles.infoGrid}>
-                    <View style={[styles.infoItem, { backgroundColor: colors.surfaceLight }]}>
-                        <Text style={[styles.infoLabel, { color: colors.textMuted }]}>GPS</Text>
-                        <Text style={[styles.infoValue, { color: isMockLocation ? colors.error : colors.success }]}>{isMockLocation ? 'Mock ⚠️' : 'Valid ✓'}</Text>
-                    </View>
-                    <View style={[styles.infoItem, { backgroundColor: colors.surfaceLight }]}>
-                        <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Jarak</Text>
-                        <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{distance !== null ? formatDistance(distance) : '-'}</Text>
-                    </View>
+    // Error state
+    if (mode === 'error') {
+        return (
+            <View style={[styles.container, styles.centered]}>
+                <View style={[styles.errorIcon, { backgroundColor: colors.error }]}>
+                    <Text style={styles.errorEmoji}>✕</Text>
                 </View>
+                <Text style={[styles.errorTitle, { color: colors.error }]}>
+                    Gagal
+                </Text>
+                <Text style={[styles.errorSubtitle, { color: colors.textMuted }]}>
+                    {errorMessage}
+                </Text>
+                <TouchableOpacity
+                    style={[styles.retryButton, { backgroundColor: colors.accent }]}
+                    onPress={handleRetry}
+                >
+                    <Text style={styles.retryButtonText}>Coba Lagi</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.cancelButton, { borderColor: colors.surfaceLight, marginTop: spacing.sm }]}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Kembali</Text>
+                </TouchableOpacity>
             </View>
+        );
+    }
 
-            <View style={styles.buttonContainer}>
-                <TouchableOpacity style={[styles.faceButton, { backgroundColor: colors.surface, borderColor: colors.accent + '50' }]} onPress={handleStartCapture} disabled={isProcessing}>
-                    <Text style={styles.faceIcon}>📷</Text>
-                    <Text style={[styles.faceButtonText, { color: colors.accent }]}>Verifikasi dengan Wajah</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.confirmButton, { backgroundColor: colors.accent }, isProcessing && styles.buttonDisabled]} onPress={handleSkipFace} disabled={isProcessing}>
-                    {isProcessing ? <ActivityIndicator color={colors.primary} /> : (
-                        <>
-                            <Text style={styles.confirmIcon}>{isCheckedIn ? '🚪' : '✓'}</Text>
-                            <Text style={[styles.confirmButtonText, { color: colors.primary }]}>{isCheckedIn ? 'Check Out' : 'Check In'} Langsung</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.surfaceLight }]} onPress={() => navigation.goBack()} disabled={isProcessing}>
-                    <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Batal</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+    return null;
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
-    container: { flex: 1 },
-    previewCard: { alignItems: 'center', padding: spacing.xxl, paddingTop: spacing.xxl + 20 },
-    previewIcon: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg, borderWidth: 2 },
-    previewEmoji: { fontSize: 36 },
-    previewTitle: { ...typography.h2 },
-    previewTime: { ...typography.clock, marginTop: spacing.sm },
-    infoCard: { borderRadius: borderRadius.lg, padding: spacing.lg, marginHorizontal: spacing.lg, marginBottom: spacing.lg },
-    infoGrid: { flexDirection: 'row', gap: spacing.md },
-    infoItem: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
-    infoLabel: { ...typography.caption, marginBottom: 4 },
-    infoValue: { ...typography.body, fontWeight: '600' },
-    buttonContainer: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.sm },
-    faceButton: { flexDirection: 'row', borderRadius: borderRadius.lg, padding: spacing.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1 },
-    faceIcon: { fontSize: 18 },
-    faceButtonText: { ...typography.body, fontWeight: '600' },
-    confirmButton: { flexDirection: 'row', borderRadius: borderRadius.lg, padding: spacing.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, ...shadows.glow },
-    buttonDisabled: { opacity: 0.7 },
-    confirmIcon: { fontSize: 18 },
-    confirmButtonText: { ...typography.h3, fontWeight: '700' },
-    cancelButton: { borderRadius: borderRadius.lg, padding: spacing.md, alignItems: 'center', borderWidth: 1 },
-    cancelButtonText: { ...typography.body },
-    successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    capturedPhoto: { width: 100, height: 120, borderRadius: borderRadius.lg, marginBottom: spacing.lg },
-    successIcon: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg },
-    successEmoji: { fontSize: 36, color: '#fff' },
-    successText: { ...typography.h2 },
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    centered: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.xl,
+    },
+    statusText: {
+        ...typography.body,
+        marginTop: spacing.lg,
+    },
+    header: {
+        padding: spacing.md,
+        paddingTop: spacing.lg,
+        alignItems: 'center',
+        borderBottomLeftRadius: borderRadius.xl,
+        borderBottomRightRadius: borderRadius.xl,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+    },
+    badge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 4,
+        borderRadius: borderRadius.sm,
+    },
+    badgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    headerTime: {
+        ...typography.clock,
+    },
+    floatingCancel: {
+        position: 'absolute',
+        top: spacing.lg,
+        right: spacing.lg,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    floatingCancelText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    successIcon: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+    },
+    successEmoji: {
+        fontSize: 48,
+        color: '#fff',
+    },
+    successTitle: {
+        ...typography.h1,
+        marginBottom: spacing.sm,
+    },
+    successTime: {
+        ...typography.h2,
+    },
+    errorIcon: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+    },
+    errorEmoji: {
+        fontSize: 48,
+        color: '#fff',
+    },
+    errorTitle: {
+        ...typography.h2,
+        marginBottom: spacing.sm,
+    },
+    errorSubtitle: {
+        ...typography.body,
+        textAlign: 'center',
+        marginBottom: spacing.xl,
+        paddingHorizontal: spacing.lg,
+    },
+    retryButton: {
+        paddingHorizontal: spacing.xl,
+        paddingVertical: spacing.md,
+        borderRadius: borderRadius.lg,
+    },
+    retryButtonText: {
+        ...typography.body,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    cancelButton: {
+        paddingHorizontal: spacing.xl,
+        paddingVertical: spacing.md,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        marginTop: spacing.lg,
+    },
+    cancelButtonText: {
+        ...typography.body,
+    },
 });

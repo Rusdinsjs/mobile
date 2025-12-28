@@ -1,5 +1,6 @@
 // Auth Store using Zustand (simplified without persistence for initial testing)
 import { create } from 'zustand';
+import { cacheFaceEmbeddings, clearCachedEmbeddings, clearPendingAttendance } from '../services/OfflineService';
 
 interface User {
     id: string;
@@ -46,32 +47,54 @@ export const useAuthStore = create<AuthState>((set) => ({
     isAuthenticated: false,
     isLoading: false,
 
-    setUser: (user) => set({ user }),
+    setUser: (user) => {
+        set({ user });
+        // Cache face embeddings for offline use
+        if (user.face_embeddings && user.face_embeddings.length > 0) {
+            cacheFaceEmbeddings(user.id, user.face_embeddings);
+        }
+    },
 
     setTokens: (accessToken, refreshToken) =>
         set({ accessToken, refreshToken }),
 
-    login: (user, accessToken, refreshToken) =>
+    login: (user, accessToken, refreshToken) => {
         set({
             user,
             accessToken,
             refreshToken,
             isAuthenticated: true,
             isLoading: false,
-        }),
+        });
+        // Cache face embeddings for offline use
+        if (user.face_embeddings && user.face_embeddings.length > 0) {
+            cacheFaceEmbeddings(user.id, user.face_embeddings);
+        }
+    },
 
-    logout: () =>
+    logout: () => {
+        // Clear offline data on logout
+        clearCachedEmbeddings();
+        clearPendingAttendance();
         set({
             user: null,
             accessToken: null,
             refreshToken: null,
             isAuthenticated: false,
-        }),
+        });
+    },
 
     setLoading: (isLoading) => set({ isLoading }),
 
     updateFaceEmbeddings: (embeddings) =>
-        set((state) => ({
-            user: state.user ? { ...state.user, face_embeddings: embeddings } : null,
-        })),
+        set((state) => {
+            // Also update offline cache
+            if (state.user) {
+                cacheFaceEmbeddings(state.user.id, embeddings);
+            }
+            return {
+                user: state.user ? { ...state.user, face_embeddings: embeddings } : null,
+            };
+        }),
 }));
+

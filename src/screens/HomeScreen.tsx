@@ -1,12 +1,13 @@
 // Home Screen with Dynamic Theming
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ScrollView, Alert } from 'react-native';
 import { spacing, borderRadius, shadows, typography } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useColors } from '../store/themeStore';
 import { attendanceAPI, commonAPI } from '../api/client';
 import { useLocation } from '../hooks/useLocation';
+import { useAttendanceUpdates } from '../hooks/useWebSocket';
 import { calculateDistance, formatDistance } from '../utils/geofence';
 
 interface HomeScreenProps { navigation: any; }
@@ -18,8 +19,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     const [companyName, setCompanyName] = useState('AttendX');
 
     const user = useAuthStore((state) => state.user);
-    const { todayAttendance, isCheckedIn, isCheckedOut, setTodayAttendance } = useAttendanceStore();
+    const logout = useAuthStore((state) => state.logout);
+    const { todayAttendance, isCheckedIn, isCheckedOut, setTodayAttendance, reset: resetAttendance } = useAttendanceStore();
     const { latitude, longitude, isMockLocation, error: locationError } = useLocation();
+
+    // WebSocket: Listen for attendance updates
+    const { connected } = useAttendanceUpdates(() => {
+        console.log('[Home] Attendance update received via WebSocket');
+        fetchTodayStatus();
+    });
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -42,6 +50,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         setRefreshing(true);
         await fetchTodayStatus();
         setRefreshing(false);
+    };
+
+    const handleLogout = () => {
+        Alert.alert('Logout', 'Yakin ingin keluar?', [
+            { text: 'Batal', style: 'cancel' },
+            { text: 'Logout', style: 'destructive', onPress: () => { resetAttendance(); logout(); } },
+        ]);
     };
 
     const distance = user && latitude && longitude ? calculateDistance(user.office_lat, user.office_long, latitude, longitude) : null;
@@ -76,9 +91,28 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                     <Text style={[styles.greeting, { color: colors.textSecondary }]}>Selamat datang di {companyName},</Text>
                     <Text style={[styles.userName, { color: colors.textPrimary }]}>{user?.name?.split(' ')[0] || 'User'}</Text>
                 </View>
-                <View style={[styles.statusPill, { backgroundColor: getStatusColor() + '20' }]}>
-                    <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
-                    <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {connected && (
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success }} />
+                    )}
+                    <View style={[styles.statusPill, { backgroundColor: getStatusColor() + '20' }]}>
+                        <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
+                        <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
+                    </View>
+                    <TouchableOpacity
+                        onPress={handleLogout}
+                        style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 20,
+                            backgroundColor: colors.error + '20',
+                            marginLeft: 6,
+                            borderWidth: 1,
+                            borderColor: colors.error + '40'
+                        }}
+                    >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.error }}>KELUAR</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -158,6 +192,16 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                     Dekati area kantor untuk melakukan absensi
                 </Text>
             )}
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.md, marginTop: spacing.md }}>
+                <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: spacing.sm, borderRadius: borderRadius.full, paddingHorizontal: spacing.md }}
+                    onPress={handleLogout}
+                >
+                    <Text style={{ marginRight: spacing.xs, fontSize: 16 }}>🔴</Text>
+                    <Text style={{ color: colors.error, fontWeight: '600' }}>Keluar</Text>
+                </TouchableOpacity>
+            </View>
         </ScrollView>
     );
 }

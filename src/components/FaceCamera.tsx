@@ -67,7 +67,22 @@ export default function FaceCamera({ onCapture, onCancel, isLoading }: FaceCamer
                     {isLoading ? <ActivityIndicator color={colors.primary} /> : <View style={[styles.captureInner, { backgroundColor: colors.accent }]} />}
                 </TouchableOpacity>
                 <Text style={[styles.captureHint, { color: colors.textMuted }]}>{isLoading ? 'Memproses...' : 'Tekan untuk mengambil foto'}</Text>
-                <TouchableOpacity style={styles.skipButton} onPress={onCancel}><Text style={[styles.skipText, { color: colors.textSecondary }]}>Lewati Verifikasi Wajah</Text></TouchableOpacity>
+                <TouchableOpacity
+                    style={[
+                        styles.button,
+                        {
+                            backgroundColor: 'transparent',
+                            marginTop: spacing.md,
+                            width: '100%',
+                            borderWidth: 1,
+                            borderColor: colors.error,
+                            alignItems: 'center'
+                        }
+                    ]}
+                    onPress={onCancel}
+                >
+                    <Text style={[styles.buttonText, { color: colors.error }]}>Batal</Text>
+                </TouchableOpacity>
             </View>
         </View>
     );

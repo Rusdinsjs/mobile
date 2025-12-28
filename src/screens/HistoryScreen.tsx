@@ -1,6 +1,6 @@
-// History Screen with Dynamic Theming
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
+// History Screen with Monthly Tabs and Recaps
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { spacing, borderRadius, typography } from '../styles/theme';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useColors } from '../store/themeStore';
@@ -8,22 +8,25 @@ import { attendanceAPI } from '../api/client';
 
 interface AttendanceRecord {
     id: string;
-    check_in_time: string;
-    check_out_time?: string;
+    check_in_time: string | null;
+    check_out_time?: string | null;
     is_late?: boolean;
 }
+
+type TabType = 'two_months_ago' | 'last_month' | 'this_month';
 
 export default function HistoryScreen() {
     const colors = useColors();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabType>('this_month');
     const { history, setHistory } = useAttendanceStore();
 
     useEffect(() => { fetchHistory(); }, []);
 
     const fetchHistory = async () => {
         try {
-            const response = await attendanceAPI.getHistory(30);
+            const response = await attendanceAPI.getHistory(90); // 3 months of data
             setHistory(response.data.attendances || []);
         } catch (error) {
             console.log('Failed to fetch history');
@@ -38,7 +41,87 @@ export default function HistoryScreen() {
         setRefreshing(false);
     };
 
-    const formatDate = (dateStr: string) => {
+    // Calculate date ranges for each tab
+    const getDateRanges = () => {
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+
+        // This month: 1st of current month to yesterday
+        const thisMonthStart = new Date(thisYear, thisMonth, 1);
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(23, 59, 59, 999);
+
+        // Last month: 1st to last day of previous month
+        const lastMonthStart = new Date(thisYear, thisMonth - 1, 1);
+        const lastMonthEnd = new Date(thisYear, thisMonth, 0, 23, 59, 59, 999);
+
+        // Two months ago
+        const twoMonthsStart = new Date(thisYear, thisMonth - 2, 1);
+        const twoMonthsEnd = new Date(thisYear, thisMonth - 1, 0, 23, 59, 59, 999);
+
+        return {
+            this_month: { start: thisMonthStart, end: yesterday },
+            last_month: { start: lastMonthStart, end: lastMonthEnd },
+            two_months_ago: { start: twoMonthsStart, end: twoMonthsEnd },
+        };
+    };
+
+    const dateRanges = getDateRanges();
+
+    // Get month names for tabs
+    const getTabLabels = () => {
+        const now = new Date();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        const thisMonth = now.getMonth();
+
+        return {
+            this_month: months[thisMonth],
+            last_month: months[(thisMonth - 1 + 12) % 12],
+            two_months_ago: months[(thisMonth - 2 + 12) % 12],
+        };
+    };
+
+    const tabLabels = getTabLabels();
+
+    // Filter history by selected tab
+    const filteredHistory = useMemo(() => {
+        const range = dateRanges[activeTab];
+        return history.filter((item) => {
+            if (!item.check_in_time) return false;
+            const date = new Date(item.check_in_time);
+            return date >= range.start && date <= range.end;
+        });
+    }, [history, activeTab, dateRanges]);
+
+    // Calculate recap for current tab
+    const recap = useMemo(() => {
+        const data = filteredHistory;
+        const totalHadir = data.length;
+        const totalTerlambat = data.filter(d => d.is_late).length;
+
+        let totalMinutes = 0;
+        data.forEach(item => {
+            if (item.check_out_time && item.check_in_time) {
+                const diff = new Date(item.check_out_time).getTime() - new Date(item.check_in_time).getTime();
+                totalMinutes += diff / 60000;
+            }
+        });
+
+        const totalHours = Math.floor(totalMinutes / 60);
+        const remainingMins = Math.floor(totalMinutes % 60);
+
+        return {
+            hadir: totalHadir,
+            terlambat: totalTerlambat,
+            tepatWaktu: totalHadir - totalTerlambat,
+            totalJam: `${totalHours}j ${remainingMins}m`,
+        };
+    }, [filteredHistory]);
+
+    const formatDate = (dateStr: string | null) => {
+        if (!dateStr) return '-';
         const date = new Date(dateStr);
         const today = new Date();
         const yesterday = new Date(today);
@@ -49,10 +132,13 @@ export default function HistoryScreen() {
         return date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
     };
 
-    const formatTime = (dateStr: string) => new Date(dateStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const formatTime = (dateStr: string | null) => {
+        if (!dateStr) return '--:--';
+        return new Date(dateStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    };
 
-    const calculateDuration = (checkIn: string, checkOut?: string) => {
-        if (!checkOut) return null;
+    const calculateDuration = (checkIn: string | null, checkOut?: string | null) => {
+        if (!checkIn || !checkOut) return null;
         const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime();
         const hours = Math.floor(diff / 3600000);
         const mins = Math.floor((diff % 3600000) / 60000);
@@ -95,10 +181,56 @@ export default function HistoryScreen() {
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.textPrimary }]}>Riwayat</Text>
-                <Text style={[styles.subtitle, { color: colors.textMuted }]}>{history.length} catatan kehadiran</Text>
             </View>
+
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+                {(['two_months_ago', 'last_month', 'this_month'] as TabType[]).map((tab) => (
+                    <TouchableOpacity
+                        key={tab}
+                        style={[
+                            styles.tab,
+                            { backgroundColor: activeTab === tab ? colors.accent : colors.surface },
+                        ]}
+                        onPress={() => setActiveTab(tab)}
+                    >
+                        <Text style={[
+                            styles.tabText,
+                            { color: activeTab === tab ? colors.primary : colors.textMuted }
+                        ]}>
+                            {tabLabels[tab]}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            {/* Recap Summary */}
+            {(activeTab === 'this_month' || activeTab === 'last_month' || activeTab === 'two_months_ago') && (
+                <View style={[styles.recapCard, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.recapTitle, { color: colors.textMuted }]}>Rekap {tabLabels[activeTab]}</Text>
+                    <View style={styles.recapGrid}>
+                        <View style={styles.recapItem}>
+                            <Text style={[styles.recapValue, { color: colors.success }]}>{recap.hadir}</Text>
+                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Hadir</Text>
+                        </View>
+                        <View style={styles.recapItem}>
+                            <Text style={[styles.recapValue, { color: colors.accent }]}>{recap.tepatWaktu}</Text>
+                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Tepat Waktu</Text>
+                        </View>
+                        <View style={styles.recapItem}>
+                            <Text style={[styles.recapValue, { color: colors.error }]}>{recap.terlambat}</Text>
+                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Terlambat</Text>
+                        </View>
+                        <View style={styles.recapItem}>
+                            <Text style={[styles.recapValue, { color: colors.textPrimary }]}>{recap.totalJam}</Text>
+                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Total Jam</Text>
+                        </View>
+                    </View>
+                </View>
+            )}
+
             <FlatList
-                data={history}
+                data={filteredHistory}
                 keyExtractor={(item) => item.id}
                 renderItem={renderItem}
                 contentContainerStyle={styles.list}
@@ -117,9 +249,17 @@ export default function HistoryScreen() {
 const createStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { padding: spacing.lg, paddingTop: spacing.xxl + 10, paddingBottom: spacing.md },
+    header: { padding: spacing.lg, paddingTop: spacing.xxl + 10, paddingBottom: spacing.sm },
     title: { ...typography.h1 },
-    subtitle: { ...typography.bodySmall, marginTop: spacing.xs },
+    tabContainer: { flexDirection: 'row', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.md },
+    tab: { flex: 1, paddingVertical: spacing.sm, borderRadius: borderRadius.md, alignItems: 'center' },
+    tabText: { ...typography.bodySmall, fontWeight: '600' },
+    recapCard: { marginHorizontal: spacing.lg, marginBottom: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg },
+    recapTitle: { ...typography.caption, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+    recapGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+    recapItem: { alignItems: 'center' },
+    recapValue: { fontSize: 20, fontWeight: '700' },
+    recapLabel: { ...typography.caption, marginTop: 2 },
     list: { padding: spacing.lg, paddingTop: 0, gap: spacing.sm },
     card: { borderRadius: borderRadius.lg, padding: spacing.md },
     cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, gap: spacing.sm },
