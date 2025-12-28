@@ -75,6 +75,7 @@ export default function TransferRequestScreen({ navigation }: TransferRequestScr
 
         try {
             await apiClient.post('/api/users/transfer-requests', {
+                requested_office_id: selectedOffice.id,
                 requested_office_lat: selectedOffice.latitude,
                 requested_office_long: selectedOffice.longitude,
                 requested_radius: selectedOffice.radius,
