@@ -6,8 +6,8 @@
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 
 // Configuration
-const EMBEDDING_THRESHOLD = 0.6; // Euclidean distance threshold for face match
-const COSINE_THRESHOLD = 0.5;    // Cosine similarity threshold (higher = more similar)
+const EMBEDDING_THRESHOLD = 0.5; // Euclidean distance threshold (lower = stricter, 0.6 was too loose)
+const COSINE_THRESHOLD = 0.75;    // Cosine similarity threshold (higher = stricter, 0.5 was way too loose)
 const EMBEDDING_SIZE = 192;      // MobileFaceNet output size
 const INPUT_SIZE = 112;          // MobileFaceNet input size (112x112)
 

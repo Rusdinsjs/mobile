@@ -62,22 +62,23 @@ export function FaceVerificationCamera({
         }
     }, [modelState]);
 
-    // Fallback mode: simulate verification after a delay
+    // Fallback mode: In development/emulator where model might fail, 
+    // we should NOT auto-pass. We should inform the user or fail gracefully.
     useEffect(() => {
         if (useFallbackMode && hasPermission && device) {
-            console.log('[FaceVerificationCamera] Running fallback verification...');
+            console.warn('[FaceVerificationCamera] Model failed to load. Verification disabled for security.');
+            // Do NOT auto-pass with isMatch: true
+            // Instead, we wait and then call result with false or let the user know
             const timer = setTimeout(() => {
-                // Simulate successful verification with pseudo-embedding
-                const pseudoEmbedding = Array(192).fill(0).map(() => Math.random() * 2 - 1);
                 onVerificationResult({
-                    isMatch: true,
-                    confidence: 0.85,
-                    embedding: pseudoEmbedding,
+                    isMatch: false,
+                    confidence: 0,
                 });
-            }, 2000); // 2 second delay to simulate processing
+                onError?.('Model AI gagal dimuat. Gunakan perangkat asli dengan Development Build.');
+            }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [useFallbackMode, hasPermission, device, onVerificationResult]);
+    }, [useFallbackMode, hasPermission, device, onVerificationResult, onError]);
 
     // Callback to handle verification result on JS thread
     const handleVerificationResult = Worklets.createRunOnJS((

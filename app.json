@@ -17,7 +17,7 @@
       "bundleIdentifier": "com.roesch.attendx",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Diperlukan untuk verifikasi lokasi saat check-in/check-out",
-        "NSCameraUsageDescription": "Diperlukan untuk verifikasi wajah saat check-in"
+        "NSCameraUsageDescription": "Diperlukan untuk verifikasi wajah saat absensi"
       }
     },
     "android": {
@@ -82,8 +82,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "50c50c29-d036-46d3-849d-81536c66f534"
+        "projectId": "a088b487-4468-4d3c-bd12-0bd917fd0bd0"
       }
-    }
+    },
+    "owner": "rusdinsjs"
   }
 }
