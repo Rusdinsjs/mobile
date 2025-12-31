@@ -16,6 +16,7 @@ interface User {
     employee_id: string;
     name: string;
     email: string;
+    photo?: string;
     role: string;
     office_lat: number;
     office_long: number;

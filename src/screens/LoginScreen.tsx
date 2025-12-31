@@ -67,7 +67,9 @@ export default function LoginScreen() {
                 const response = await authAPI.login({ email, password });
                 const { user, access_token, refresh_token } = response.data;
                 console.log('✅ Login successful');
-                login(user, access_token, refresh_token, password); // Pass password for caching
+                // Map avatar_url to photo if present
+                const userWithPhoto = { ...user, photo: user.photo || user.avatar_url };
+                login(userWithPhoto, access_token, refresh_token, password); // Pass password for caching
             } else {
                 // OFFLINE LOGIN
                 console.log('📴 Attempting offline login...');

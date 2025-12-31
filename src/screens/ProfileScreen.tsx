@@ -10,13 +10,14 @@ import {
     Modal,
     TextInput,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { spacing, borderRadius, shadows, typography, themes } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useThemeStore, useColors } from '../store/themeStore';
-import { userAPI } from '../api/client';
+import { userAPI, API_BASE_URL } from '../api/client';
 import { useUserUpdates } from '../hooks/useWebSocket'; // Import WebSocket hook
 
 interface ProfileScreenProps {
@@ -49,6 +50,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 // Ensure office data is correctly structured
                 const updatedUser = {
                     ...res.data,
+                    photo: res.data.photo || res.data.avatar_url,
                     office_lat: res.data.office?.latitude || res.data.office_lat,
                     office_long: res.data.office?.longitude || res.data.office_long,
                     allowed_radius: res.data.office?.radius || res.data.allowed_radius,
@@ -59,6 +61,34 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             console.log('[Profile] Failed to refresh profile:', error);
         }
     });
+
+    // Fetch latest profile data on mount to get photo/avatar
+    React.useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const res = await userAPI.getProfile();
+                if (res.data) {
+                    const updatedUser = {
+                        ...res.data,
+                        photo: res.data.photo || res.data.avatar_url,
+                        office_lat: res.data.office?.latitude || res.data.office_lat,
+                        office_long: res.data.office?.longitude || res.data.office_long,
+                        allowed_radius: res.data.office?.radius || res.data.allowed_radius,
+                    };
+                    setUser(updatedUser);
+                }
+            } catch (error) {
+                console.log('Failed to fetch profile on mount');
+            }
+        };
+        fetchProfile();
+    }, []);
+
+    const getPhotoUrl = (path: string | undefined) => {
+        if (!path) return undefined;
+        if (path.startsWith('http')) return path;
+        return `${API_BASE_URL}${path}`;
+    };
 
     const handleLogout = () => {
         Alert.alert('Logout', 'Yakin ingin keluar?', [
@@ -134,10 +164,18 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
             {/* Profile Card */}
             <View style={[styles.profileCard, { backgroundColor: colors.surface }]}>
-                <View style={[styles.avatarContainer, { borderColor: colors.accent }]}>
-                    <Text style={[styles.avatarText, { color: colors.accent }]}>
-                        {user?.name?.charAt(0).toUpperCase()}
-                    </Text>
+                <View style={[styles.avatarContainer, { borderColor: colors.accent, overflow: 'hidden' }]}>
+                    {user?.photo ? (
+                        <Image
+                            source={{ uri: getPhotoUrl(user.photo) }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <Text style={[styles.avatarText, { color: colors.accent }]}>
+                            {user?.name?.charAt(0).toUpperCase()}
+                        </Text>
+                    )}
                 </View>
                 <Text style={[styles.name, { color: colors.textPrimary }]}>{user?.name}</Text>
                 <Text style={[styles.role, { color: colors.textSecondary }]}>{user?.role}</Text>

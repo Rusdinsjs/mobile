@@ -5,6 +5,7 @@ import { spacing, borderRadius, shadows, typography } from '../styles/theme';
 import { useAuthStore } from '../store/authStore';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useColors } from '../store/themeStore';
+import { BlurView } from 'expo-blur';
 import { attendanceAPI, commonAPI } from '../api/client';
 import { useLocation } from '../hooks/useLocation';
 import { useAttendanceUpdates } from '../hooks/useWebSocket';
@@ -87,32 +88,21 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         >
             {/* Header */}
             <View style={styles.header}>
-                <View>
+                <View style={{ flex: 1 }}>
                     <Text style={[styles.greeting, { color: colors.textSecondary }]}>Selamat datang di {companyName},</Text>
                     <Text style={[styles.userName, { color: colors.textPrimary }]}>{user?.name?.split(' ')[0] || 'User'}</Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    {connected && (
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success }} />
-                    )}
-                    <View style={[styles.statusPill, { backgroundColor: getStatusColor() + '20' }]}>
-                        <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
-                        <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
+
+                <View style={{ alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {connected && (
+                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success, marginRight: 8 }} />
+                        )}
+                        <View style={[styles.statusPill, { backgroundColor: getStatusColor() + '15', borderColor: getStatusColor() + '30', borderWidth: 1 }]}>
+                            <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
+                            <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText().toUpperCase()}</Text>
+                        </View>
                     </View>
-                    <TouchableOpacity
-                        onPress={handleLogout}
-                        style={{
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            borderRadius: 20,
-                            backgroundColor: colors.error + '20',
-                            marginLeft: 6,
-                            borderWidth: 1,
-                            borderColor: colors.error + '40'
-                        }}
-                    >
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.error }}>KELUAR</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -172,20 +162,42 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 </View>
             </View>
 
-            {/* Action Button */}
-            <TouchableOpacity
-                style={[
-                    styles.actionButton,
-                    { backgroundColor: isCheckedOut ? colors.success : colors.accent },
-                    isCheckedOut && styles.actionButtonCompleted
-                ]}
-                onPress={() => !isCheckedOut && navigation.navigate('CheckIn')}
-                disabled={isCheckedOut}
-            >
-                <Text style={[styles.actionButtonText, { color: colors.primary }]}>
-                    {isCheckedOut ? '✅ Selesai Hari Ini' : isCheckedIn ? '🚪 Check Out' : '✅ Check In'}
-                </Text>
-            </TouchableOpacity>
+            {/* Action Section */}
+            <View style={styles.actionWrapper}>
+                {isCheckedOut ? (
+                    <BlurView intensity={20} tint="light" style={styles.glassCard}>
+                        <View style={[styles.infoCardInner, { borderColor: colors.success + '40' }]}>
+                            <Text style={[styles.infoText, { color: colors.success }]}>
+                                ✨ Selesai Hari Ini
+                            </Text>
+                            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+                                Kerja bagus! Sampai jumpa besok.
+                            </Text>
+                        </View>
+                    </BlurView>
+                ) : (
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => navigation.navigate('CheckIn')}
+                        style={styles.actionButtonContainer}
+                    >
+                        <BlurView
+                            intensity={40}
+                            tint="default"
+                            style={[
+                                styles.glassButton,
+                                { backgroundColor: isCheckedIn ? colors.warning + '20' : colors.accent + '20', borderColor: isCheckedIn ? colors.warning + '40' : colors.accent + '40' }
+                            ]}
+                        >
+                            <View style={[styles.buttonContent, { backgroundColor: isCheckedIn ? colors.warning : colors.accent }]}>
+                                <Text style={[styles.actionButtonText, { color: colors.white }]}>
+                                    {isCheckedIn ? '🚪 CHECK OUT' : '✅ CHECK IN'}
+                                </Text>
+                            </View>
+                        </BlurView>
+                    </TouchableOpacity>
+                )}
+            </View>
 
             {!isWithinOffice && !isCheckedOut && (
                 <Text style={[styles.disabledHint, { color: colors.textMuted }]}>
@@ -193,15 +205,26 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 </Text>
             )}
 
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.md, marginTop: spacing.md }}>
-                <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: spacing.sm, borderRadius: borderRadius.full, paddingHorizontal: spacing.md }}
-                    onPress={handleLogout}
-                >
-                    <Text style={{ marginRight: spacing.xs, fontSize: 16 }}>🔴</Text>
-                    <Text style={{ color: colors.error, fontWeight: '600' }}>Keluar</Text>
-                </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+                onPress={handleLogout}
+                style={{
+                    alignSelf: 'flex-end',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: colors.surface,
+                    padding: spacing.sm,
+                    borderRadius: borderRadius.full,
+                    paddingHorizontal: spacing.md,
+                    marginBottom: 12,
+                    marginTop: spacing.md,
+                    borderWidth: 1,
+                    borderColor: colors.error + '20'
+                }}
+            >
+                <Text style={{ marginRight: spacing.xs, fontSize: 14 }}>🔴</Text>
+                <Text style={{ color: colors.error, fontWeight: '600', fontSize: 12 }}>Keluar</Text>
+            </TouchableOpacity>
+
         </ScrollView>
     );
 }
@@ -234,8 +257,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     locationIcon: { fontSize: 20, marginBottom: spacing.xs },
     locationLabel: { ...typography.caption, marginBottom: 2 },
     locationValue: { ...typography.body, fontWeight: '600' },
-    actionButton: { borderRadius: borderRadius.lg, padding: spacing.lg, alignItems: 'center', marginTop: spacing.md, ...shadows.glow },
-    actionButtonCompleted: { opacity: 0.7 },
-    actionButtonText: { ...typography.h3, fontWeight: '700' },
+    actionWrapper: { marginTop: spacing.md, overflow: 'hidden', borderRadius: borderRadius.xl },
+    glassCard: { padding: spacing.lg, borderRadius: borderRadius.xl, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    infoCardInner: { alignItems: 'center', padding: spacing.sm },
+    infoText: { ...typography.h3, fontWeight: '800', letterSpacing: 0.5 },
+    actionButtonContainer: { borderRadius: borderRadius.xl, overflow: 'hidden' },
+    glassButton: { padding: 6, borderRadius: borderRadius.xl, borderWidth: 1 },
+    buttonContent: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xl, borderRadius: borderRadius.lg, alignItems: 'center', ...shadows.md },
+    actionButtonText: { ...typography.h3, fontWeight: '800', letterSpacing: 1.5 },
     disabledHint: { ...typography.caption, textAlign: 'center', marginTop: spacing.sm },
 });

@@ -11,6 +11,7 @@ interface AttendanceRecord {
     check_in_time: string | null;
     check_out_time?: string | null;
     is_late?: boolean;
+    is_early_leave?: boolean;
 }
 
 type TabType = 'two_months_ago' | 'last_month' | 'this_month';
@@ -101,22 +102,13 @@ export default function HistoryScreen() {
         const totalHadir = data.length;
         const totalTerlambat = data.filter(d => d.is_late).length;
 
-        let totalMinutes = 0;
-        data.forEach(item => {
-            if (item.check_out_time && item.check_in_time) {
-                const diff = new Date(item.check_out_time).getTime() - new Date(item.check_in_time).getTime();
-                totalMinutes += diff / 60000;
-            }
-        });
-
-        const totalHours = Math.floor(totalMinutes / 60);
-        const remainingMins = Math.floor(totalMinutes % 60);
+        const totalCepatPulang = data.filter(d => d.is_early_leave).length;
 
         return {
             hadir: totalHadir,
             terlambat: totalTerlambat,
             tepatWaktu: totalHadir - totalTerlambat,
-            totalJam: `${totalHours}j ${remainingMins}m`,
+            cepatPulang: totalCepatPulang,
         };
     }, [filteredHistory]);
 
@@ -152,6 +144,7 @@ export default function HistoryScreen() {
             <View style={styles.cardHeader}>
                 <Text style={[styles.cardDate, { color: colors.textPrimary }]}>{formatDate(item.check_in_time)}</Text>
                 {item.is_late && <View style={[styles.lateBadge, { backgroundColor: colors.error + '20' }]}><Text style={[styles.lateText, { color: colors.error }]}>Terlambat</Text></View>}
+                {item.is_early_leave && <View style={[styles.lateBadge, { backgroundColor: colors.warning + '20' }]}><Text style={[styles.lateText, { color: colors.warning }]}>Cepat Pulang</Text></View>}
                 {!item.check_out_time && <View style={[styles.activeBadge, { backgroundColor: colors.success + '20' }]}><Text style={[styles.activeText, { color: colors.success }]}>Aktif</Text></View>}
             </View>
             <View style={styles.cardBody}>
@@ -222,8 +215,8 @@ export default function HistoryScreen() {
                             <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Terlambat</Text>
                         </View>
                         <View style={styles.recapItem}>
-                            <Text style={[styles.recapValue, { color: colors.textPrimary }]}>{recap.totalJam}</Text>
-                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Total Jam</Text>
+                            <Text style={[styles.recapValue, { color: colors.warning }]}>{recap.cepatPulang}</Text>
+                            <Text style={[styles.recapLabel, { color: colors.textMuted }]}>Cepat Pulang</Text>
                         </View>
                     </View>
                 </View>

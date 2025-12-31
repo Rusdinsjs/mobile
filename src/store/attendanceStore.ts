@@ -9,6 +9,7 @@ interface Attendance {
     check_in_lat: number | null;
     check_in_long: number | null;
     is_late: boolean;
+    is_early_leave?: boolean;
     is_mock_location: boolean;
 }
 
